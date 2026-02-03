@@ -7,13 +7,9 @@ This project was part of the Intern Screening Task.
 Features
 
 Upload CSV files containing chemical equipment parameters.
-
 Interactive charts (Bar, Scatter) for data visualization.
-
 Works both as a Web application (React.js frontend + Flask/Django backend) and a Desktop app (using Electron/pywebview).
-
 Simple authentication for secure access.
-
 Modular architecture: web-frontend and backend folders.
 
 Project Structure
@@ -37,7 +33,6 @@ Prerequisites
 Node.js (v18+ recommended) – for React frontend
 
 Python (v3.10+) – for backend
-
 pip – Python package manager
 
 Git – for version control
@@ -49,7 +44,6 @@ cd chemical-equipment-visualizer
 Step 2: Setup Backend
 
 Navigate to backend folder:
-
 cd backend
 
 
@@ -61,26 +55,19 @@ python -m venv venv
 Activate the virtual environment:
 
 Windows:
-
 venv\Scripts\activate
 
 
 Linux/Mac:
-
 source venv/bin/activate
 
 
 Install dependencies:
-
 pip install -r requirements.txt
 
 
 Run the backend server:
-
 python manage.py runserver   # For Django
-# OR
-flask run                    # For Flask
-
 
 Backend will run on http://127.0.0.1:5000 (Flask) or http://127.0.0.1:8000 (Django)
 
@@ -90,16 +77,11 @@ Open a new terminal and navigate to frontend:
 
 cd web-frontend
 
-
 Install frontend dependencies:
-
 npm install
 
-
 Start the React app:
-
 npm start
-
 
 React app will run on http://localhost:3000. Make sure the backend server is running for API calls.
 
@@ -107,18 +89,11 @@ Step 4: Using the App
 
 Open the frontend in your browser.
 
-Login using default credentials (if provided).
-
 Upload your CSV file containing chemical equipment data.
-
 View charts and analysis in the dashboard.
 
-Step 5: Converting to Desktop App (Optional)
-
-If using Electron or pywebview, package the app for Windows/Linux/Mac.
-
-Follow Electron or pywebview documentation to bundle the frontend + backend into a single executable.
-
+Step 5: for  Desktop App 
+run desktop_app.py file 
 Notes
 
 Ensure backend server is running before starting the frontend.
