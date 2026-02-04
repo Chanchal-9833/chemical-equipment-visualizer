@@ -1,6 +1,8 @@
 import sys
 import requests
 import webbrowser
+from PyQt5.QtWidgets import QPushButton, QFileDialog, QMessageBox
+
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
@@ -43,6 +45,22 @@ class EquipmentApp(QWidget):
         # ===== TOP FILTERS =====
         top_layout = QHBoxLayout()
 
+        
+        self.upload_btn = QPushButton("Upload CSV")
+        self.upload_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4e73df;
+                color: white;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2e59d9;
+            }
+        """)
+
+        self.upload_btn.clicked.connect(self.upload_csv)
         self.upload_combo = QComboBox()
         self.upload_combo.currentIndexChanged.connect(self.on_filter_changed)
 
@@ -54,6 +72,9 @@ class EquipmentApp(QWidget):
             "Upload Trend"
         ])
         self.chart_combo.currentIndexChanged.connect(self.on_filter_changed)
+
+        top_layout.addWidget(self.upload_btn)
+
 
         top_layout.addWidget(QLabel("Select Upload:"))
         top_layout.addWidget(self.upload_combo)
@@ -77,6 +98,7 @@ class EquipmentApp(QWidget):
 
         # ===== DOWNLOAD BUTTON =====
         self.report_btn = QPushButton("Download Report")
+        
         self.report_btn.clicked.connect(self.download_report)
         self.report_btn.setEnabled(False)
 
@@ -133,8 +155,48 @@ class EquipmentApp(QWidget):
         frame.value_label = value_label
 
         return frame
+    def upload_csv(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select CSV File",
+            "",
+            "CSV Files (*.csv)"
+        )
 
-    # ================= LOAD UPLOADS =================
+        if not file_path:
+            return  # user cancelled
+
+        try:
+            with open(file_path, "rb") as f:
+                files = {"file": f}
+                response = requests.post(
+                    "http://127.0.0.1:8000/api/upload-csv/",
+                    files=files
+                )
+
+            if response.status_code == 200:
+                QMessageBox.information(self, "Success", "CSV uploaded successfully")
+
+                # 🔁 refresh UI just like React
+                self.load_uploads()
+                self.refresh_dashboard()
+
+            else:
+                QMessageBox.critical(self, "Error", "CSV upload failed")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
+
+    def refresh_dashboard(self):
+        upload_id = self.upload_combo.currentData()
+        if not upload_id:
+            return
+
+        self.load_summary(upload_id)
+        self.load_equipment(upload_id)
+        
+
+
     def load_uploads(self):
         try:
             res = requests.get(f"{API_BASE}/uploads/")
@@ -155,7 +217,7 @@ class EquipmentApp(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 
-    # ================= FILTER CHANGED =================
+    
     def on_filter_changed(self):
         upload_id = self.upload_combo.currentData()
 
@@ -168,7 +230,7 @@ class EquipmentApp(QWidget):
         self.load_equipment(upload_id)
         self.update_chart(upload_id)
 
-    # ================= SUMMARY =================
+
     def load_summary(self, upload_id):
         res = requests.get(f"{API_BASE}/summary/?upload_id={upload_id}")
         data = res.json()["summary"]
@@ -177,7 +239,7 @@ class EquipmentApp(QWidget):
         self.flow_card.value_label.setText(f"{data['avg_flowrate']:.2f}")
         self.temp_card.value_label.setText(f"{data['avg_temperature']:.2f}")
 
-    # ================= TABLE =================
+    #
     def load_equipment(self, upload_id):
         res = requests.get(f"{API_BASE}/filter-equipment/?upload_id={upload_id}")
         equipment = res.json()
@@ -193,7 +255,7 @@ class EquipmentApp(QWidget):
 
         self.table.resizeColumnsToContents()
 
-    # ================= CHART =================
+    
     def update_chart(self, upload_id):
         chart_type = self.chart_combo.currentText()
 
@@ -238,18 +300,17 @@ class EquipmentApp(QWidget):
 
         self.chart_widget.draw()
 
-    # ================= DOWNLOAD REPORT =================
+    
     def download_report(self):
         upload_id = self.upload_combo.currentData()
         webbrowser.open(f"{API_BASE}/report/?upload_id={upload_id}")
 
-    # ================= DATA HELPER =================
+  
     def get_equipment_data(self, upload_id):
         res = requests.get(f"{API_BASE}/filter-equipment/?upload_id={upload_id}")
         return res.json()
 
 
-# ================= RUN =================
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = EquipmentApp()

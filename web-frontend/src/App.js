@@ -1,6 +1,4 @@
-
 import { useEffect, useState } from "react";
-
 import { Bar, Scatter } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -12,7 +10,14 @@ import {
   Legend
 } from "chart.js";
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, Tooltip, Legend);
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  PointElement,
+  Tooltip,
+  Legend
+);
 
 function App() {
   const [summary, setSummary] = useState(null);
@@ -22,35 +27,87 @@ function App() {
   const [selectedUpload, setSelectedUpload] = useState("");
   const [chartType, setChartType] = useState("type");
 
-  useEffect(() => {
-    if (uploads.length > 0 && !selectedUpload) setSelectedUpload(String(uploads[0].id));
-  }, [uploads]);
+  const [csvFile, setCsvFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
 
-  useEffect(() => {
+  /* ---------------- LOAD UPLOADS ---------------- */
+  const loadUploads = () => {
     fetch("http://127.0.0.1:8000/api/uploads/")
       .then(res => res.json())
-      .then(data => setUploads(data));
-  }, []);
+      .then(data => {
+        setUploads(data);
+        if (data.length > 0) {
+          setSelectedUpload(String(data[0].id)); // auto-select latest
+        }
+      });
+  };
 
   useEffect(() => {
+    loadUploads();
+  }, []);
+
+  /* ---------------- SUMMARY ---------------- */
+  useEffect(() => {
     if (!selectedUpload) return;
+
     fetch(`http://127.0.0.1:8000/api/summary/?upload_id=${selectedUpload}`)
       .then(res => res.json())
       .then(data => setSummary(data));
   }, [selectedUpload]);
 
+  /* ---------------- EQUIPMENT ---------------- */
   useEffect(() => {
     if (!selectedUpload) return;
+
     let url = `http://127.0.0.1:8000/api/filter-equipment/?upload_id=${selectedUpload}`;
     if (type) url += `&type=${type}`;
+
     fetch(url)
       .then(res => res.json())
       .then(data => setEquipment(data));
   }, [selectedUpload, type]);
 
-  if (!summary) return <p>Loading summary...</p>;
+  /* ---------------- CSV UPLOAD ---------------- */
+  const handleUpload = async () => {
+    if (!csvFile) {
+      alert("Please select a CSV file");
+      return;
+    }
 
-  // Chart Data
+    const formData = new FormData();
+    formData.append("file", csvFile);
+
+    setUploading(true);
+
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/upload-csv/", {
+        method: "POST",
+        body: formData
+      });
+       setCsvFile(null);
+    setSummary(null);
+    setType([]);
+    setSelectedUpload("");
+    loadUploads();
+
+
+
+      if (!res.ok) throw new Error("Upload failed");
+
+      alert("CSV uploaded successfully");
+      setCsvFile(null);
+      loadUploads(); // refresh dashboard
+
+    } catch (err) { 
+      alert("CSV upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  if (!summary) return <p style={{ textAlign: "center" }}>Loading dashboard...</p>;
+
+  /* ---------------- CHART DATA ---------------- */
   const typeChart = {
     labels: summary.type_distribution.map(i => i.equipment_type),
     datasets: [{
@@ -85,190 +142,121 @@ function App() {
       backgroundColor: "#e74a3b"
     }]
   };
-  
 
- return (
-  <div style={containerStyle}>
-    <h1 style={titleStyle}>Chemical Equipment Dashboard</h1>
+  return (
+    <div style={containerStyle}>
+      <h1 style={titleStyle}>Chemical Equipment Dashboard</h1>
 
-    {/* Filters */}
-    <div style={filterContainer}>
-      <select onChange={e => setType(e.target.value)} style={selectStyle}>
-        <option value="">All Types</option>
-        <option value="Pump">Pump</option>
-        <option value="Valve">Valve</option>
-        <option value="Reactor">Reactor</option>
-      </select>
+      {/* CONTROLS */}
+      <div style={filterContainer}>
+        <input
+          type="file"
+          accept=".csv"
+          onChange={e => setCsvFile(e.target.files[0])}
+        />
 
-      <select
-        value={selectedUpload}
-        onChange={e => setSelectedUpload(e.target.value)}
-        style={selectStyle}
-      >
-        <option value="">Select Upload</option>
-        {uploads.map(u => (
-          <option key={u.id} value={u.id}>
-            Upload {u.id} - {u.uploaded_at}
-          </option>
-        ))}
-      </select>
+        <button onClick={handleUpload} disabled={uploading} style={buttonStyle}>
+          {uploading ? "Uploading..." : "Upload CSV"}
+        </button>
 
-      <select onChange={e => setChartType(e.target.value)} style={selectStyle}>
-        <option value="type">Type Distribution</option>
-        <option value="flow">Flowrate Comparison</option>
-        <option value="scatter">Flowrate vs Pressure</option>
-        <option value="temp">Temperature Distribution</option>
-      </select>
-
-      <button
-        disabled={!selectedUpload}
-        onClick={() =>
-          window.open(
-            `http://127.0.0.1:8000/api/report/?upload_id=${selectedUpload}`,
-            "_blank"
-          )
-        }
-        style={buttonStyle}
-      >
-        Download Report
-      </button>
-    </div>
-
-    {/* Summary Cards */}
-    <div style={cardContainer}>
-      {[
-        { label: "Total Equipment", value: summary.summary.total_equipment, color: "#4e73df" },
-        { label: "Avg Flowrate", value: Number(summary.summary.avg_flowrate).toFixed(2), color: "#1cc88a" },
-        { label: "Avg Pressure", value: Number(summary.summary.avg_pressure).toFixed(2), color: "#36b9cc" },
-        { label: "Avg Temperature", value: Number(summary.summary.avg_temperature).toFixed(2), color: "#e74a3b" }
-      ].map((card, idx) => (
-        <div key={idx} style={{ ...cardStyle, borderTop: `4px solid ${card.color}` }}>
-          <h3>{card.label}</h3>
-          <p style={{ fontSize: "1.5rem", fontWeight: "bold" }}>{card.value}</p>
-        </div>
-      ))}
-    </div>
-
-    {/* Chart */}
-    <div style={chartWrapper}>
-      {chartType === "type" && <Bar data={typeChart} />}
-      {chartType === "flow" && <Bar data={flowChart} />}
-      {chartType === "scatter" && <Scatter data={scatterChart} />}
-      {chartType === "temp" && <Bar data={tempChart} />}
-    </div>
-
-    {/* Table */}
-    <div style={tableWrapper}>
-      <table style={tableStyle}>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Flowrate</th>
-            <th>Pressure</th>
-            <th>Temperature</th>
-          </tr>
-        </thead>
-        <tbody>
-          {equipment.map((e, i) => (
-            <tr
-              key={i}
-              style={{ cursor: "pointer" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "#f1f5ff")}
-              onMouseLeave={e => (e.currentTarget.style.background = "white")}
-            >
-              <td>{e.equipment_name}</td>
-              <td>{e.equipment_type}</td>
-              <td>{e.flowrate}</td>
-              <td>{e.pressure}</td>
-              <td>{e.temperature}</td>
-            </tr>
+        <select value={selectedUpload} onChange={e => setSelectedUpload(e.target.value)} style={selectStyle}>
+          <option value="">Select Upload</option>
+          {uploads.map(u => (
+            <option key={u.id} value={u.id}>
+              Upload {u.id} - {u.uploaded_at}
+            </option>
           ))}
-        </tbody>
-      </table>
-    </div>
-  </div>
-);
+        </select>
 
+        <select onChange={e => setType(e.target.value)} style={selectStyle}>
+          <option value="">All Types</option>
+          <option value="Pump">Pump</option>
+          <option value="Valve">Valve</option>
+          <option value="Reactor">Reactor</option>
+        </select>
+
+        <select onChange={e => setChartType(e.target.value)} style={selectStyle}>
+          <option value="type">Type Distribution</option>
+          <option value="flow">Flowrate</option>
+          <option value="scatter">Flow vs Pressure</option>
+          <option value="temp">Temperature</option>
+        </select>
+
+        <button
+          onClick={() =>
+            window.open(
+              `http://127.0.0.1:8000/api/report/?upload_id=${selectedUpload}`,
+              "_blank"
+            )
+          }
+          style={buttonStyle}
+        >
+          Download Report
+        </button>
+      </div>
+
+      {/* SUMMARY */}
+      <div style={cardContainer}>
+        {[
+          ["Total Equipment", summary.summary.total_equipment],
+          ["Avg Flowrate", summary.summary.avg_flowrate.toFixed(2)],
+          ["Avg Pressure", summary.summary.avg_pressure.toFixed(2)],
+          ["Avg Temperature", summary.summary.avg_temperature.toFixed(2)]
+        ].map(([label, value], i) => (
+          <div key={i} style={cardStyle}>
+            <h3>{label}</h3>
+            <p style={{ fontSize: "1.4rem", fontWeight: "bold" }}>{value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* CHART */}
+      <div style={chartWrapper}>
+        {chartType === "type" && <Bar data={typeChart} />}
+        {chartType === "flow" && <Bar data={flowChart} />}
+        {chartType === "scatter" && <Scatter data={scatterChart} />}
+        {chartType === "temp" && <Bar data={tempChart} />}
+      </div>
+
+      {/* TABLE */}
+      <div style={tableWrapper}>
+        <table style={tableStyle}>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Flowrate</th>
+              <th>Pressure</th>
+              <th>Temperature</th>
+            </tr>
+          </thead>
+          <tbody>
+            {equipment.map((e, i) => (
+              <tr key={i}>
+                <td>{e.equipment_name}</td>
+                <td>{e.equipment_type}</td>
+                <td>{e.flowrate}</td>
+                <td>{e.pressure}</td>
+                <td>{e.temperature}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
-// Styles
-const containerStyle = {
-  fontFamily: "Arial, sans-serif",
-  padding: "20px",
-  backgroundColor: "#f8f9fc"
-};
-
-const titleStyle = {
-  textAlign: "center",
-  marginBottom: "20px",
-  color: "#2e59d9"
-};
-
-const filterContainer = {
-  display: "flex",
-  flexWrap: "wrap",
-  justifyContent: "center",
-  gap: "12px",
-  marginBottom: "25px"
-};
-
-const cardContainer = {
-  display: "flex",
-  flexWrap: "wrap",
-  justifyContent: "center",
-  gap: "20px",
-  marginBottom: "30px"
-};
-
-const chartWrapper = {
-  width: "100%",
-  maxWidth: "900px",
-  height: "400px",   
-  margin: "auto",
-  marginBottom: "40px"
-};
-
-
-const tableWrapper = {
-  width: "100%",
-  overflowX: "auto"
-};
-
-const selectStyle = {
-  padding: "8px 12px",
-  borderRadius: "6px",
-  border: "1px solid #ced4da",
-  fontSize: "1rem",
-  minWidth: "160px"
-};
-
-const buttonStyle = {
-  padding: "8px 16px",
-  borderRadius: "6px",
-  border: "none",
-  backgroundColor: "#4e73df",
-  color: "white",
-  cursor: "pointer",
-  fontWeight: "bold"
-};
-
-const cardStyle = {
-  backgroundColor: "white",
-  padding: "15px 25px",
-  borderRadius: "8px",
-  boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
-  textAlign: "center",
-  minWidth: "180px",
-  flex: "1 1 200px"
-};
-
-const tableStyle = {
-  width: "100%",
-  borderCollapse: "collapse",
-  backgroundColor: "white",
-  boxShadow: "0 4px 6px rgba(0,0,0,0.05)"
-};
-
+/* ---------------- STYLES ---------------- */
+const containerStyle = { padding: "20px", background: "#f8f9fc" };
+const titleStyle = { textAlign: "center", color: "#2e59d9" };
+const filterContainer = { display: "flex", flexWrap: "wrap", gap: "10px", justifyContent: "center", marginBottom: "20px" };
+const cardContainer = { display: "flex", gap: "20px", justifyContent: "center", marginBottom: "30px" };
+const cardStyle = { background: "white", padding: "15px", borderRadius: "8px", textAlign: "center", minWidth: "180px" };
+const chartWrapper = { maxWidth: "900px", margin: "auto" };
+const tableWrapper = { marginTop: "30px", overflowX: "auto" };
+const tableStyle = { width: "100%", background: "white", borderCollapse: "collapse" };
+const selectStyle = { padding: "8px", borderRadius: "6px" };
+const buttonStyle = { padding: "8px 16px", background: "#4e73df", color: "white", border: "none", borderRadius: "6px" };
 
 export default App;
